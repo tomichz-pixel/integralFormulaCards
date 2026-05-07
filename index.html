@@ -1,3 +1,497 @@
-<html>
+<div id="math-game" style="width:100%; max-width:900px; margin:auto; font-family:sans-serif; position: relative;">
 
-</html>
+<!-- MathJaxの読み込み -->
+<script>
+window.MathJax = {
+  tex: {
+    inlineMath: [['\\(', '\\)']],
+    displayMath: [['\\[', '\\]']]
+  }
+};
+</script>
+<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+<style>
+#math-game * { box-sizing:border-box; user-select:none; }
+
+#math-game .header {
+    height:48px;
+    background:#333;
+    color:#fff;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:0 12px;
+    font-size:14px;
+}
+
+#math-game .controls {
+    background: #f4f4f4;
+    padding: 10px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+    font-size: 14px;
+    border-bottom: 2px solid #ddd;
+}
+
+#math-game .controls label {
+    cursor: pointer;
+    font-weight: bold;
+}
+
+#math-game #reset-btn {
+    width: auto;
+    padding: 6px 12px;
+    margin: 0;
+    font-size: 13px;
+    background: #2196F3;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+#math-game .board {
+    display:flex;
+    flex-direction:column;
+}
+
+#math-game .area {
+    display:grid;
+    grid-template-columns:repeat(3, 1fr);
+    gap:8px;
+    padding:10px;
+}
+
+#math-game #bottom {
+    border-top: 2px dashed #ccc;
+}
+
+#math-game .card {
+    width:100%;
+    cursor:pointer;
+    border-radius:8px;
+    box-shadow:0 1px 4px rgba(0,0,0,0.15);
+}
+
+#math-game .card-inner-wrapper {
+    position:relative;
+    width:100%;
+    padding-bottom:70%; 
+}
+
+#math-game .inner {
+    position:absolute;
+    top:0; left:0;
+    width:100%;
+    height:100%;
+    transform-style:preserve-3d;
+    transition:0.25s;
+    border-radius:8px;
+}
+
+#math-game .flipped .inner {
+    transform:rotateY(180deg);
+}
+
+#math-game .front,
+#math-game .back {
+    position:absolute;
+    top:0; left:0;
+    width:100%;
+    height:100%;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    text-align:center;
+    padding:4px;
+    backface-visibility:hidden;
+    -webkit-backface-visibility:hidden;
+    border-radius:8px;
+    font-weight:normal;
+}
+
+#math-game .math-text {
+    font-size: clamp(14px, 3.5vw, 18px);
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+#math-game #top .front { background:#BBDEFB; color:#0D47A1; font-weight:bold; }
+#math-game #bottom .front { background:#FFE0B2; color:#E65100; font-weight:bold; }
+
+#math-game .back {
+    background:white;
+    transform:rotateY(180deg);
+}
+
+#math-game #top .back { color:#1565C0; }
+#math-game #bottom .back { color:#E65100; }
+
+#math-game .matched {
+    opacity:0;
+    transform:scale(0);
+    transition:0.25s;
+    pointer-events: none;
+}
+
+#math-game .modal {
+    display:none;
+    position:absolute;
+    top:0; left:0;
+    width:100%;
+    height:100%;
+    background:rgba(0,0,0,0.5);
+    justify-content:center;
+    align-items:flex-start; 
+    padding-top: 105px;
+    z-index: 10;
+}
+
+#math-game .modal-content {
+    background:white;
+    padding:20px;
+    border-radius:10px;
+    width:90%;
+    max-width:420px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    max-height: calc(100vh - 120px);
+    display: flex;
+    flex-direction: column;
+}
+
+#math-game #txt {
+    overflow-y: auto;
+    padding-right: 5px;
+    text-align: center;
+}
+</style>
+
+<div class="header">
+    <div>積分公式めくり（不定積分編）</div>
+    <div>タイム: <span id="t">0</span>秒　ミス: <span id="m">0</span></div>
+</div>
+
+<div class="controls">
+    <label><input type="radio" name="pairCount" value="3"> 3組</label>
+    <label><input type="radio" name="pairCount" value="6" checked> 6組</label>
+    <button id="reset-btn">やり直す</button>
+</div>
+
+<div class="board">
+    <div class="area" id="top"></div>
+    <div class="area" id="bottom"></div>
+</div>
+
+<div class="modal" id="modal">
+    <div class="modal-content">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 15px;">
+            <h3 id="mt" style="margin: 0; color: #333; font-size: 1.2em;"></h3>
+            <button id="btn" style="width: auto; margin: 0; padding: 6px 16px; background: #FF9800; color: white; border: none; border-radius: 20px; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.2); cursor: pointer;">次へ ＞</button>
+        </div>
+        <div id="txt"></div>
+    </div>
+</div>
+
+<script>
+(function(){
+
+const integralPairs = [
+  {
+    id: "int_01",
+    type: "三角積分",
+    latexA: "\\int \\sin^2 x \\,dx",
+    latexB: "\\frac{x}{2} - \\frac{\\sin 2x}{4} + C",
+    note: "半角の公式 \\(\\sin^2 x = \\frac{1-\\cos 2x}{2}\\) を用いて次数を下げる。"
+  },
+  {
+    id: "int_02",
+    type: "三角積分",
+    latexA: "\\int \\cos^2 x \\,dx",
+    latexB: "\\frac{x}{2} + \\frac{\\sin 2x}{4} + C",
+    note: "半角の公式 \\(\\cos^2 x = \\frac{1+\\cos 2x}{2}\\) を用いて次数を下げる。"
+  },
+  {
+    id: "int_03",
+    type: "三角積分",
+    latexA: "\\int \\sin x \\cos x \\,dx",
+    latexB: "\\frac{\\sin^2 x}{2} + C",
+    note: "2倍角の公式で \\(\\frac{\\sin 2x}{2}\\) に直すか、\\(u=\\sin x\\) で置換積分します。なお、\\(u=\\cos x\\) で置換すると \\(-\\frac{\\cos^2 x}{2} + C\\) となりますが、積分定数 \\(C\\) の違いで吸収されるためどちらも正解です。"
+  },
+  {
+    id: "int_04",
+    type: "逆三角関連",
+    latexA: "\\int \\frac{1}{1+x^2} \\,dx",
+    latexB: "\\arctan x + C",
+    note: "\\(x=\\tan\\theta\\) と置換する標準形。\\(dx = \\frac{1}{\\cos^2\\theta}d\\theta\\) と分母の \\(1+\\tan^2\\theta = \\frac{1}{\\cos^2\\theta}\\) が綺麗に約分されて消えるのがポイントです。"
+  },
+  {
+    id: "int_05",
+    type: "逆三角関連",
+    latexA: "\\int \\frac{1}{\\sqrt{1-x^2}} \\,dx",
+    latexB: "\\arcsin x + C",
+    note: "\\(x=\\sin\\theta\\) と置換する標準形。\\(dx = \\cos\\theta d\\theta\\) と、分母の \\(\\sqrt{1-\\sin^2\\theta} = \\cos\\theta\\) が打ち消し合って \\(1\\) になります。"
+  },
+  {
+    id: "int_06",
+    type: "逆三角関連",
+    latexA: "\\int \\frac{1}{a^2+x^2} \\,dx",
+    latexB: "\\frac{1}{a}\\arctan\\left(\\frac{x}{a}\\right) + C",
+    note: "\\(x=a\\tan\\theta\\) と置換する標準形。\\(dx\\) の変換で出る \\(a\\) と分母の \\(a^2\\) が約分され、結果に \\(\\frac{1}{a}\\) がかかることに注意。"
+  },
+  {
+    id: "int_07",
+    type: "逆三角関連",
+    latexA: "\\int \\frac{1}{\\sqrt{a^2-x^2}} \\,dx",
+    latexB: "\\arcsin\\left(\\frac{x}{a}\\right) + C",
+    note: "\\(x=a\\sin\\theta\\) と置換。分母のルートから出る \\(a\\) と \\(dx\\) から出る \\(a\\) が完全に約分されるため、こちらには \\(\\frac{1}{a}\\) はかかりません。"
+  },
+  {
+    id: "int_08",
+    type: "指数・対数",
+    latexA: "\\int a^x \\,dx",
+    latexB: "\\frac{a^x}{\\ln a} + C",
+    note: "指数関数の微分 \\((a^x)' = a^x \\ln a\\) からの逆算。"
+  },
+  {
+    id: "int_09",
+    type: "指数・対数",
+    latexA: "\\int e^{ax} \\,dx",
+    latexB: "\\frac{1}{a} e^{ax} + C",
+    note: "合成関数の微分の逆算で、係数 \\(\\frac{1}{a}\\) で補正する。"
+  },
+  {
+    id: "int_10",
+    type: "指数・対数",
+    latexA: "\\int \\ln x \\,dx",
+    latexB: "x \\ln x - x + C",
+    note: "\\(1 \\cdot \\ln x\\) と見なし、\\(\\ln x\\) を微分側に回して部分積分。第2項が \\(-\\int x \\cdot \\frac{1}{x} \\,dx\\) となり、\\(x\\) が約分されてただの定数の積分になる巧妙な手口です。"
+  },
+  {
+    id: "int_11",
+    type: "部分積分",
+    latexA: "\\int x e^x \\,dx",
+    latexB: "(x-1)e^x + C",
+    note: "\\(x\\) を微分側、\\(e^x\\) を積分側に設定して部分積分を行う。"
+  },
+  {
+    id: "int_12",
+    type: "部分積分",
+    latexA: "\\int x \\ln x \\,dx",
+    latexB: "\\frac{x^2}{2}\\ln x - \\frac{x^2}{4} + C",
+    note: "対数関数は積分が困難なため、常に微分側に回すのが鉄則です。\\(x\\) を積分側、\\(\\ln x\\) を微分側に設定して部分積分を行います。"
+  },
+  {
+    id: "int_13",
+    type: "高度な置換",
+    latexA: "\\int \\frac{1}{\\cos x} \\,dx",
+    latexB: "\\frac{1}{2}\\log\\left(\\frac{1+\\sin x}{1-\\sin x}\\right) + C",
+    note: "分母分子に \\(\\cos x\\) を掛けて \\(\\sin x=t\\) と置換します。積分の中身が \\(\\frac{1}{1-t^2}\\) となるため、\\(\\frac{1}{2}\\left(\\frac{1}{1+t} + \\frac{1}{1-t}\\right)\\) と部分分数分解して対数積分に持ち込みます。"
+  },
+  {
+    id: "int_14",
+    type: "無理関数",
+    latexA: "\\int \\sqrt{x^2 - a^2} \\,dx",
+    latexB: "\\frac{x}{2}\\sqrt{x^2-a^2} - \\frac{a^2}{2}\\log\\vert x+\\sqrt{x^2-a^2}\\vert + C",
+    note: "\\(1 \\cdot\\) として部分積分を行い、同形出現させて方程式で解く。"
+  },
+  {
+    id: "int_15",
+    type: "無理関数",
+    latexA: "\\int \\sqrt{a^2 - x^2} \\,dx",
+    latexB: "\\frac{x}{2}\\sqrt{a^2-x^2} + \\frac{a^2}{2}\\arcsin\\left(\\frac{x}{a}\\right) + C",
+    note: "\\(x = a\\sin\\theta\\) と置換するか、部分積分で同形出現させます。グラフが表す半円の面積（扇形＋直角三角形）を幾何学的に求めた形と完全に一致します。"
+  },
+  {
+    id: "int_16",
+    type: "部分積分",
+    latexA: "\\int e^x \\{f(x) + f'(x)\\} \\,dx",
+    latexB: "e^x f(x) + C",
+    note: "積の微分法 \\(\\{e^x f(x)\\}' = e^x f(x) + e^x f'(x)\\) の逆演算です。入試問題ではこの形が隠れていることが多く、見抜けると一瞬で積分が完了します。"
+  },
+  {
+    id: "int_17",
+    type: "三角積分",
+    latexA: "\\int \\tan x \\,dx",
+    latexB: "-\\log|\\cos x| + C",
+    note: "\\(\\tan x = \\frac{\\sin x}{\\cos x}\\) と変形し、分子が分母の微分のマイナス倍（\\(\\frac{-f'(x)}{f(x)}\\) の形）になっていることを利用します。"
+  }
+];
+
+let topSel=null, botSel=null, lock=false, modalOpen=false;
+let miss=0, match=0, start=null, timer;
+let currentPairCount = 6;
+
+const topArea=document.querySelector('#math-game #top');
+const bottomArea=document.querySelector('#math-game #bottom');
+const modal=document.querySelector('#math-game #modal');
+const mt=document.querySelector('#math-game #mt');
+const txt=document.querySelector('#math-game #txt');
+const btn=document.querySelector('#math-game #btn');
+const resetBtn=document.querySelector('#math-game #reset-btn');
+
+function shuffle(a){ return a.sort(()=>Math.random()-0.5); }
+
+function renderMath() {
+    if(window.MathJax) {
+        MathJax.typesetPromise().catch((err) => console.log(err.message));
+    }
+}
+
+function card(d, cardType){
+    let c=document.createElement('div');
+    c.className='card';
+
+    let wrapper=document.createElement('div');
+    wrapper.className='card-inner-wrapper';
+
+    let i=document.createElement('div');
+    i.className='inner';
+
+    let f=document.createElement('div');
+    f.className='front';
+    f.innerHTML = cardType === 'formula' ? '積分式<br><span style="font-size:10px; font-weight:normal;">(Tap)</span>' : '計算結果<br><span style="font-size:10px; font-weight:normal;">(Tap)</span>';
+
+    let b=document.createElement('div');
+    b.className='back math-text'; 
+    
+    // 条件式の表示（今回は使用していませんが、拡張時のために残しています）
+    let conditionHtml = (cardType === 'formula' && d.cond) ? `<div style="font-size:0.65em; color:#d32f2f; margin-bottom:5px;">\\( ${d.cond} \\) のとき</div>` : '';
+    b.innerHTML = conditionHtml + (cardType === 'formula' ? `\\( \\displaystyle ${d.latexA} \\)` : `\\( \\displaystyle ${d.latexB} \\)`);
+
+    i.appendChild(f);
+    i.appendChild(b);
+    wrapper.appendChild(i);
+    c.appendChild(wrapper);
+
+    c.onclick=()=>{
+        if(lock||modalOpen) return;
+        if(c.classList.contains('matched')) return;
+
+        if(!start){
+            start=Date.now();
+            timer=setInterval(()=>{
+                document.getElementById('t').textContent = Math.floor((Date.now()-start)/1000);
+            },250);
+        }
+
+        if (cardType === 'formula' && topSel && topSel.c === c) {
+            c.classList.remove('flipped');
+            topSel = null; return;
+        }
+        if (cardType === 'value' && botSel && botSel.c === c) {
+            c.classList.remove('flipped');
+            botSel = null; return;
+        }
+
+        c.classList.add('flipped');
+
+        if(cardType==='formula'){
+            if(topSel) topSel.c.classList.remove('flipped');
+            topSel={c,d};
+        }else{
+            if(botSel) botSel.c.classList.remove('flipped');
+            botSel={c,d};
+        }
+
+        if(topSel && botSel){
+            lock=true;
+
+            setTimeout(()=>{
+                let isMatch = topSel.d.id === botSel.d.id;
+                // 結合記号を = に変更
+                let sign = "=";
+                
+                let condHtmlModal = topSel.d.cond ? `<div style="font-size:0.85em; color:#d32f2f; margin-bottom:5px; font-weight:bold;">【前提】 \\( ${topSel.d.cond} \\)</div>` : '';
+
+                let modalBody = 
+                    condHtmlModal + 
+                    `<div style="font-size:1.2em; margin:15px 0;">\\( \\displaystyle ${topSel.d.latexA} ${sign} ${topSel.d.latexB} \\)</div>`+
+                    `<div style="font-size:0.95em; text-align:left; background:#f4f4f4; padding:15px; border-radius:6px; line-height:1.6;">`+
+                    `<b>【解説: ${topSel.d.type}】</b><br>${topSel.d.note}</div>`;
+
+                if(isMatch){
+                    show('正解！', modalBody, ()=>{
+                        topSel.c.classList.add('matched');
+                        botSel.c.classList.add('matched');
+                        match++;
+                        reset();
+                        if(match===currentPairCount) end();
+                    });
+                }else{
+                    miss++;
+                    document.getElementById('m').textContent=miss;
+                    show('ちがうよ', modalBody, ()=>{
+                        topSel.c.classList.remove('flipped');
+                        botSel.c.classList.remove('flipped');
+                        reset();
+                    });
+                }
+            },600);
+        }
+    };
+
+    return c;
+}
+
+function reset(){ topSel=null; botSel=null; lock=false; }
+
+function show(t,body,cb){
+    modalOpen=true;
+    mt.textContent=t;
+    txt.innerHTML=body;
+    modal.style.display='flex';
+    
+    renderMath();
+
+    btn.onclick=()=>{
+        modal.style.display='none';
+        modalOpen=false;
+        cb();
+    };
+}
+
+function end(){
+    clearInterval(timer);
+    show('クリア！',`<div style="margin:10px 0; font-size:18px;">タイム: <b>${document.getElementById('t').textContent}</b>秒<br>ミス: <b>${miss}</b>回</div>よくできました！`, init);
+}
+
+function init(){
+    topSel=null; botSel=null;
+    match=0; miss=0;
+    document.getElementById('m').textContent=0;
+    document.getElementById('t').textContent=0;
+    if(timer) clearInterval(timer);
+    start=null;
+
+    const radios = document.getElementsByName('pairCount');
+    for (let r of radios) {
+        if (r.checked) currentPairCount = parseInt(r.value);
+    }
+
+    // integralPairsからランダムに切り取る
+    let gameData = shuffle([...integralPairs]).slice(0, currentPairCount);
+
+    topArea.innerHTML='';
+    bottomArea.innerHTML='';
+
+    shuffle([...gameData]).forEach(d=>topArea.appendChild(card(d,'formula')));
+    shuffle([...gameData]).forEach(d=>bottomArea.appendChild(card(d,'value')));
+
+    renderMath();
+}
+
+resetBtn.onclick = init;
+
+init();
+
+})();
+</script>
+
+</div>
